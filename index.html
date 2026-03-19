@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FNaF Web Game - Movement</title>
+    <title>FNaF Web Game - Align X</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; user-select: none; }
         canvas { display: block; }
@@ -16,49 +16,22 @@
             text-shadow: 2px 2px #000; z-index: 10;
         }
 
-        /* Кнопки перемещения */
-        #movement-controls {
-            position: absolute;
-            bottom: 20px; left: 20px;
-            display: grid;
-            grid-template-columns: repeat(3, 60px);
-            grid-template-rows: repeat(2, 60px);
-            gap: 10px;
-            z-index: 20;
-        }
-        .move-btn {
-            width: 60px; height: 60px;
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid #fff;
-            color: #fff;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer; font-weight: bold;
-            transition: background 0.2s;
-        }
-        .move-btn:active { background: rgba(255, 255, 255, 0.5); }
-        .btn-up { grid-column: 2; }
-        .btn-left { grid-column: 1; grid-row: 2; }
-        .btn-down { grid-column: 2; grid-row: 2; }
-        .btn-right { grid-column: 3; grid-row: 2; }
-
-        /* Зона фонарика (центр экрана) */
+        /* Зона фонарика */
         #click-flashlight {
             position: absolute;
-            top: 25%; left: 30%; width: 40%; height: 40%;
+            top: 20%; left: 20%; width: 60%; height: 50%;
             z-index: 5; cursor: crosshair;
         }
 
-        /* Кнопка двери (правый нижний угол) */
+        /* Кнопка двери */
         #click-door {
             position: absolute;
-            bottom: 20px; right: 20px;
-            width: 150px; height: 60px;
-            background: rgba(255, 0, 0, 0.3);
-            border: 2px solid red;
-            color: white;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer; z-index: 20;
+            bottom: 0; left: 0; width: 100%; height: 25%;
+            background: linear-gradient(transparent, rgba(255, 0, 0, 0.15));
+            color: white; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 20; font-size: 20px; opacity: 0; transition: 0.3s;
         }
+        #click-door:hover { opacity: 1; }
 
         #end-video {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -69,16 +42,8 @@
 <body>
 
     <div id="ui">12:00 AM</div>
-
-    <div id="movement-controls">
-        <div class="move-btn btn-up" id="m-up">W</div>
-        <div class="move-btn btn-left" id="m-left">A</div>
-        <div class="move-btn btn-down" id="m-down">S</div>
-        <div class="move-btn btn-right" id="m-right">D</div>
-    </div>
-
     <div id="click-flashlight"></div>
-    <div id="click-door">ДВЕРЬ</div>
+    <div id="click-door">ЗАКРЫТЬ ДВЕРЬ</div>
     <video id="end-video" playsinline></video>
 
     <script type="importmap">
@@ -99,37 +64,36 @@
         let gameActive = true;
         let timeInSeconds = 0;
         let enemyTimer = Math.random() * 10 + 7;
-        const moveSpeed = 0.1; // Скорость шага
+        const GAME_DURATION = 360;
 
         // --- Сцена ---
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 1.6, 0);
-        camera.lookAt(0, 1.6, 10);
+        
+        // ПОЗИЦИЯ ИГРОКА: X = 1, Z = 0.1
+        camera.position.set(1, 1.6, 0.1);
+        
+        // Взгляд строго вперед по линии X=1 (в сторону +Z)
+        camera.lookAt(1, 1.6, 10); 
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.02);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.01);
         scene.add(ambientLight);
 
+        // Фонарик
         const flashlight = new THREE.SpotLight(0xffffff, 0);
         flashlight.position.copy(camera.position);
         flashlight.angle = Math.PI / 7;
-        flashlight.castShadow = true;
+        flashlight.penumbra = 0.3;
         
         const lightTarget = new THREE.Object3D();
+        lightTarget.position.set(1, 1.6, 10); // Светит туда же, куда смотрит игрок
         scene.add(lightTarget);
         flashlight.target = lightTarget;
         scene.add(flashlight);
-
-        // Обновление направления света за камерой
-        function updateLight() {
-            flashlight.position.copy(camera.position);
-            lightTarget.position.set(camera.position.x, camera.position.y, camera.position.z + 10);
-        }
-        updateLight();
 
         // --- Загрузка ---
         const loader = new GLTFLoader();
@@ -137,49 +101,33 @@
         loader.load('location.glb', (gltf) => scene.add(gltf.scene));
         loader.load('enemy.glb', (gltf) => {
             enemyModel = gltf.scene;
-            enemyModel.position.set(0, 0.5, 2);
+            // ПРОТИВНИК ТЕПЕРЬ НА X = 1
+            enemyModel.position.set(1, 0.5, 2); 
             scene.add(enemyModel);
         });
 
-        // --- Управление ---
-        const keys = { w: false, a: false, s: false, d: false };
-        
-        // Обработка кнопок на экране
-        const setupBtn = (id, key) => {
-            const el = document.getElementById(id);
-            el.addEventListener('mousedown', () => keys[key] = true);
-            el.addEventListener('mouseup', () => keys[key] = false);
-            el.addEventListener('mouseleave', () => keys[key] = false);
-            // Для сенсорных экранов
-            el.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key] = true; });
-            el.addEventListener('touchend', () => keys[key] = false);
-        };
-
-        setupBtn('m-up', 'w'); setupBtn('m-left', 'a');
-        setupBtn('m-down', 's'); setupBtn('m-right', 'd');
-
-        // Фонарик
+        // --- Логика ---
         document.getElementById('click-flashlight').addEventListener('mousedown', () => { if(gameActive) flashlight.intensity = 15; });
         document.getElementById('click-flashlight').addEventListener('mouseup', () => flashlight.intensity = 0);
 
-        // Дверь
-        document.getElementById('click-door').addEventListener('click', () => {
-            if (state === 'ready') {
+        document.getElementById('click-door').addEventListener('mousedown', () => {
+            if (gameActive && state === 'ready') {
                 state = 'static';
-                enemyTimer = Math.random() * 10 + 10;
-                if (enemyModel) enemyModel.position.set(0, 0.5, 2);
+                enemyTimer = Math.random() * 12 + 8;
+                // ВОЗВРАТ НА X = 1
+                if (enemyModel) enemyModel.position.set(1, 0.5, 2);
             }
         });
 
         function gameOver(win) {
             gameActive = false;
+            flashlight.intensity = 0;
             const v = document.getElementById('end-video');
             v.src = win ? 'win.mp4' : 'scare.mp4';
             v.style.display = 'block';
             v.play();
         }
 
-        // --- Цикл ---
         const clock = new THREE.Clock();
 
         function animate() {
@@ -189,27 +137,21 @@
             const delta = clock.getDelta();
             timeInSeconds += delta;
 
-            // Движение
-            if (keys.w) camera.position.z += moveSpeed;
-            if (keys.s) camera.position.z -= moveSpeed;
-            if (keys.a) camera.position.x += moveSpeed;
-            if (keys.d) camera.position.x -= moveSpeed;
-            updateLight();
-
             // Часы
             let totalMins = Math.floor(timeInSeconds);
             let h = 12 + Math.floor(totalMins / 60);
             if (h > 12) h -= 12;
             document.getElementById('ui').innerText = `${h}:${(totalMins % 60).toString().padStart(2, '0')} AM`;
 
-            if (timeInSeconds >= 360) gameOver(true);
+            if (timeInSeconds >= GAME_DURATION) gameOver(true);
 
-            // ИИ
+            // ИИ Врага
             enemyTimer -= delta;
             if (enemyTimer <= 0) {
                 if (state === 'static') {
                     state = 'ready'; enemyTimer = 20;
-                    if (enemyModel) enemyModel.position.set(0, 0.5, 1);
+                    // ПЕРЕМЕЩЕНИЕ НА X = 1
+                    if (enemyModel) enemyModel.position.set(1, 0.5, 1);
                 } else if (state === 'ready') {
                     state = 'attack'; gameOver(false);
                 }
