@@ -122,7 +122,7 @@ camera.rotation.x = Math.PI;
 
         loader.load('enemy.glb', (gltf) => {
             enemyModel = gltf.scene;
-            enemyModel.position.set(0, 0.5, 2);
+            enemyModel.position.set(1, 0.5, 2);
             scene.add(enemyModel);
         });
         if (enemyModel) {
@@ -188,7 +188,7 @@ camera.rotation.x = Math.PI;
                 if (state === 'static') {
                     state = 'ready';
                     enemyTimer = 20; // 20 секунд до атаки
-                    if (enemyModel) enemyModel.position.set(0, 0.5, 1);
+                    if (enemyModel) enemyModel.position.set(1, 0.5, 1);
                 } else if (state === 'ready') {
                     state = 'attack';
                     if (enemyModel) scene.remove(enemyModel);
