@@ -125,6 +125,9 @@ camera.rotation.x = Math.PI;
             enemyModel.position.set(0, 0.5, 2);
             scene.add(enemyModel);
         });
+        if (enemyModel) {
+    camera.lookAt(enemyModel.position);
+}
 
         // --- Механики ---
         const ui = document.getElementById('ui');
