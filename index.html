@@ -92,8 +92,8 @@ const camera = new THREE.PerspectiveCamera(
     0.1,
     1000
 );
-camera.rotation.x = Math.PI;
 camera.position.set(1, 1.6, 0.1); // Высота глаз человека, смещённая по X и Z
+camera.rotation.x = Math.PI;
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
