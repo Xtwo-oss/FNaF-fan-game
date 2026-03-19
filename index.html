@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FNaF Fan Game - +Z Version</title>
+    <title>FNaF Web Game - Movement</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; user-select: none; }
         canvas { display: block; }
@@ -11,55 +11,74 @@
         /* Интерфейс часов */
         #ui {
             position: absolute;
-            top: 30px;
-            right: 30px;
-            color: #ffffff;
-            font-size: 48px;
-            font-weight: bold;
-            text-shadow: 0 0 10px rgba(255,255,255,0.5), 3px 3px #000;
-            pointer-events: none;
-            z-index: 10;
+            top: 20px; right: 20px;
+            color: #fff; font-size: 32px; font-weight: bold;
+            text-shadow: 2px 2px #000; z-index: 10;
         }
 
-        /* Зоны клика */
+        /* Кнопки перемещения */
+        #movement-controls {
+            position: absolute;
+            bottom: 20px; left: 20px;
+            display: grid;
+            grid-template-columns: repeat(3, 60px);
+            grid-template-rows: repeat(2, 60px);
+            gap: 10px;
+            z-index: 20;
+        }
+        .move-btn {
+            width: 60px; height: 60px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid #fff;
+            color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; font-weight: bold;
+            transition: background 0.2s;
+        }
+        .move-btn:active { background: rgba(255, 255, 255, 0.5); }
+        .btn-up { grid-column: 2; }
+        .btn-left { grid-column: 1; grid-row: 2; }
+        .btn-down { grid-column: 2; grid-row: 2; }
+        .btn-right { grid-column: 3; grid-row: 2; }
+
+        /* Зона фонарика (центр экрана) */
         #click-flashlight {
             position: absolute;
-            top: 20%; left: 25%; width: 50%; height: 50%;
-            cursor: crosshair;
-            z-index: 5;
+            top: 25%; left: 30%; width: 40%; height: 40%;
+            z-index: 5; cursor: crosshair;
         }
-        
+
+        /* Кнопка двери (правый нижний угол) */
         #click-door {
             position: absolute;
-            bottom: 0; left: 0; width: 100%; height: 25%;
-            cursor: pointer;
-            background: linear-gradient(transparent, rgba(255, 0, 0, 0.2));
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            bottom: 20px; right: 20px;
+            width: 150px; height: 60px;
+            background: rgba(255, 0, 0, 0.3);
+            border: 2px solid red;
             color: white;
-            font-size: 24px;
-            opacity: 0;
-            transition: opacity 0.3s;
-            z-index: 6;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 20;
         }
-        #click-door:hover { opacity: 1; }
 
-        /* Финальное видео */
         #end-video {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            display: none;
-            object-fit: cover;
-            z-index: 100;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: none; object-fit: cover; z-index: 100;
         }
     </style>
 </head>
 <body>
 
     <div id="ui">12:00 AM</div>
+
+    <div id="movement-controls">
+        <div class="move-btn btn-up" id="m-up">W</div>
+        <div class="move-btn btn-left" id="m-left">A</div>
+        <div class="move-btn btn-down" id="m-down">S</div>
+        <div class="move-btn btn-right" id="m-right">D</div>
+    </div>
+
     <div id="click-flashlight"></div>
-    <div id="click-door">ЗАКРЫТЬ ДВЕРЬ</div>
+    <div id="click-door">ДВЕРЬ</div>
     <video id="end-video" playsinline></video>
 
     <script type="importmap">
@@ -75,144 +94,129 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        // --- Константы и Состояние ---
-        let state = 'static'; // static -> ready -> attack
+        // --- Состояние ---
+        let state = 'static';
         let gameActive = true;
         let timeInSeconds = 0;
-        let enemyTimer = Math.random() * 10 + 7; 
-        const GAME_DURATION = 360; // 6 минут
+        let enemyTimer = Math.random() * 10 + 7;
+        const moveSpeed = 0.1; // Скорость шага
 
         // --- Сцена ---
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        
-        // Позиция игрока и направление взгляда в +Z
         camera.position.set(0, 1.6, 0);
-        camera.lookAt(0, 1.6, 10); 
+        camera.lookAt(0, 1.6, 10);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // --- Освещение ---
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.02); // Почти полная тьма
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.02);
         scene.add(ambientLight);
 
-        // Фонарик (SpotLight)
-        const flashlight = new THREE.SpotLight(0xffffff, 0); 
-        flashlight.position.set(0, 1.6, 0);
+        const flashlight = new THREE.SpotLight(0xffffff, 0);
+        flashlight.position.copy(camera.position);
         flashlight.angle = Math.PI / 7;
-        flashlight.penumbra = 0.4;
-        flashlight.decay = 2;
-        flashlight.distance = 15;
         flashlight.castShadow = true;
-
-        // Цель фонарика (куда он светит)
+        
         const lightTarget = new THREE.Object3D();
-        lightTarget.position.set(0, 1.6, 10); // Светит в сторону +Z
         scene.add(lightTarget);
         flashlight.target = lightTarget;
         scene.add(flashlight);
 
-        // --- Загрузка моделей ---
+        // Обновление направления света за камерой
+        function updateLight() {
+            flashlight.position.copy(camera.position);
+            lightTarget.position.set(camera.position.x, camera.position.y, camera.position.z + 10);
+        }
+        updateLight();
+
+        // --- Загрузка ---
         const loader = new GLTFLoader();
         let enemyModel;
-
-        loader.load('location.glb', (gltf) => {
-            scene.add(gltf.scene);
-        }, undefined, (e) => console.error("Ошибка загрузки локации:", e));
-
+        loader.load('location.glb', (gltf) => scene.add(gltf.scene));
         loader.load('enemy.glb', (gltf) => {
             enemyModel = gltf.scene;
-            enemyModel.position.set(0, 0.5, 2); // Начальная позиция (далеко)
+            enemyModel.position.set(0, 0.5, 2);
             scene.add(enemyModel);
-        }, undefined, (e) => console.error("Ошибка загрузки врага:", e));
-
-        // --- Механики и Интерфейс ---
-        const ui = document.getElementById('ui');
-        const video = document.getElementById('end-video');
-
-        // Включение фонарика
-        document.getElementById('click-flashlight').addEventListener('mousedown', () => {
-            if (gameActive) flashlight.intensity = 15;
         });
-        document.getElementById('click-flashlight').addEventListener('mouseup', () => {
-            flashlight.intensity = 0;
-        });
+
+        // --- Управление ---
+        const keys = { w: false, a: false, s: false, d: false };
+        
+        // Обработка кнопок на экране
+        const setupBtn = (id, key) => {
+            const el = document.getElementById(id);
+            el.addEventListener('mousedown', () => keys[key] = true);
+            el.addEventListener('mouseup', () => keys[key] = false);
+            el.addEventListener('mouseleave', () => keys[key] = false);
+            // Для сенсорных экранов
+            el.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key] = true; });
+            el.addEventListener('touchend', () => keys[key] = false);
+        };
+
+        setupBtn('m-up', 'w'); setupBtn('m-left', 'a');
+        setupBtn('m-down', 's'); setupBtn('m-right', 'd');
+
+        // Фонарик
+        document.getElementById('click-flashlight').addEventListener('mousedown', () => { if(gameActive) flashlight.intensity = 15; });
+        document.getElementById('click-flashlight').addEventListener('mouseup', () => flashlight.intensity = 0);
 
         // Дверь
-        document.getElementById('click-door').addEventListener('mousedown', () => {
-            if (gameActive && state === 'ready') {
-                resetEnemy();
+        document.getElementById('click-door').addEventListener('click', () => {
+            if (state === 'ready') {
+                state = 'static';
+                enemyTimer = Math.random() * 10 + 10;
+                if (enemyModel) enemyModel.position.set(0, 0.5, 2);
             }
         });
 
-        function resetEnemy() {
-            state = 'static';
-            enemyTimer = Math.random() * 15 + 10;
-            if (enemyModel) enemyModel.position.set(0, 0.5, 2);
-            console.log("Враг отступил");
-        }
-
-        function gameOver(isWin) {
+        function gameOver(win) {
             gameActive = false;
-            flashlight.intensity = 0;
-            video.src = isWin ? 'win.mp4' : 'scare.mp4';
-            video.style.display = 'block';
-            video.play();
+            const v = document.getElementById('end-video');
+            v.src = win ? 'win.mp4' : 'scare.mp4';
+            v.style.display = 'block';
+            v.play();
         }
 
-        // --- Основной цикл обновления ---
+        // --- Цикл ---
         const clock = new THREE.Clock();
 
-        function updateLogic() {
+        function animate() {
+            requestAnimationFrame(animate);
             if (!gameActive) return;
 
             const delta = clock.getDelta();
             timeInSeconds += delta;
 
-            // 1. Обновление цифровых часов (1 сек реального времени = 1 мин игрового)
+            // Движение
+            if (keys.w) camera.position.z += moveSpeed;
+            if (keys.s) camera.position.z -= moveSpeed;
+            if (keys.a) camera.position.x += moveSpeed;
+            if (keys.d) camera.position.x -= moveSpeed;
+            updateLight();
+
+            // Часы
             let totalMins = Math.floor(timeInSeconds);
-            let displayHours = 12 + Math.floor(totalMins / 60);
-            if (displayHours > 12) displayHours -= 12;
-            let displayMins = totalMins % 60;
-            ui.innerText = `${displayHours}:${displayMins < 10 ? '0' + displayMins : displayMins} AM`;
+            let h = 12 + Math.floor(totalMins / 60);
+            if (h > 12) h -= 12;
+            document.getElementById('ui').innerText = `${h}:${(totalMins % 60).toString().padStart(2, '0')} AM`;
 
-            // 2. Проверка на победу (6 минут)
-            if (timeInSeconds >= GAME_DURATION) {
-                gameOver(true);
-            }
+            if (timeInSeconds >= 360) gameOver(true);
 
-            // 3. ИИ противника
+            // ИИ
             enemyTimer -= delta;
             if (enemyTimer <= 0) {
                 if (state === 'static') {
-                    state = 'ready';
-                    enemyTimer = 20; // 20 секунд до скримера
-                    if (enemyModel) enemyModel.position.set(0, 0.5, 1); // Подошел ближе
-                    console.log("Враг у двери!");
+                    state = 'ready'; enemyTimer = 20;
+                    if (enemyModel) enemyModel.position.set(0, 0.5, 1);
                 } else if (state === 'ready') {
-                    state = 'attack';
-                    gameOver(false);
+                    state = 'attack'; gameOver(false);
                 }
             }
-        }
 
-        function animate() {
-            requestAnimationFrame(animate);
-            updateLogic();
             renderer.render(scene, camera);
         }
-
-        // Ресайз окна
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
         animate();
     </script>
 </body>
